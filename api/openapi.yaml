@@ -1,0 +1,931 @@
+openapi: 3.0.3
+info:
+  title: CoworkSpace Booking API
+  version: 1.0.0
+  description: |
+    API для бронювання переговорних кімнат у коворкінг-просторі.
+
+    **Особливості:**
+    - Capacity = 3 (до 3 одночасних бронювань на слот)
+    - Performance-first (кешування, пагінація, швидкі відповіді)
+    - ISO 8601 UTC формат часу
+    - Стабільні коди помилок
+
+  contact:
+    name: CoworkSpace Support
+    email: support@coworkspace.com
+
+servers:
+  - url: https://api.coworkspace.com/v1
+    description: Production server
+  - url: http://localhost:3000/v1
+    description: Local development server
+
+tags:
+  - name: meeting_rooms
+    description: Управління переговорними кімнатами
+  - name: timeslots
+    description: Часові слоти для бронювання
+  - name: bookings
+    description: Бронювання кімнат
+  - name: analytics
+    description: Статистика використання
+
+paths:
+  /meeting_rooms:
+    get:
+      tags: [meeting_rooms]
+      summary: Отримати список переговорних кімнат
+      description: |
+        Повертає список всіх доступних переговорних кімнат.
+        Підтримує пагінацію для performance.
+      operationId: listMeetingRooms
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          description: Номер сторінки
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 50
+          description: Кількість елементів на сторінці
+      responses:
+        "200":
+          description: Список кімнат успішно отримано
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MeetingRoom"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
+              example:
+                data:
+                  - meeting_room_id: "550e8400-e29b-41d4-a716-446655440000"
+                    room_name: "Conference Room A"
+                    location: "Floor 2, Room 201"
+                    capacity: 8
+                    equipment: ["projector", "whiteboard", "video_conference"]
+                    is_active: true
+                    created_at: "2025-01-01T10:00:00Z"
+                  - meeting_room_id: "660e8400-e29b-41d4-a716-446655440001"
+                    room_name: "Meeting Room B"
+                    location: "Floor 3, Room 305"
+                    capacity: 4
+                    equipment: ["tv_screen", "whiteboard"]
+                    is_active: true
+                    created_at: "2025-01-01T10:00:00Z"
+                meta:
+                  total_count: 12
+                  current_page: 1
+                  total_pages: 1
+                  limit: 20
+
+    post:
+      tags: [meeting_rooms]
+      summary: Створити нову переговорну кімнату
+      description: Доступно тільки для space_manager
+      operationId: createMeetingRoom
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMeetingRoomRequest"
+            example:
+              room_name: "Conference Room C"
+              location: "Floor 4, Room 401"
+              capacity: 10
+              equipment:
+                ["projector", "whiteboard", "video_conference", "sound_system"]
+      responses:
+        "201":
+          description: Кімната успішно створена
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeetingRoom"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /meeting_rooms/{meeting_room_id}:
+    get:
+      tags: [meeting_rooms]
+      summary: Отримати деталі кімнати
+      operationId: getMeetingRoom
+      parameters:
+        - $ref: "#/components/parameters/MeetingRoomId"
+      responses:
+        "200":
+          description: Деталі кімнати
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeetingRoom"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /timeslots:
+    get:
+      tags: [timeslots]
+      summary: Отримати доступні часові слоти
+      description: |
+        Повертає список доступних часових слотів для бронювання.
+        Показує тільки слоти де є вільна capacity (< 3 бронювань).
+
+        **US-001: Переглядати доступні часові слоти**
+      operationId: listTimeslots
+      parameters:
+        - name: meeting_room_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: ID переговорної кімнати
+        - name: date_from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2025-01-15"
+          description: Початкова дата (YYYY-MM-DD)
+        - name: date_to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2025-01-20"
+          description: Кінцева дата (YYYY-MM-DD)
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+      responses:
+        "200":
+          description: Список доступних слотів
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TimeslotAvailability"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
+              example:
+                data:
+                  - timeslot_id: "770e8400-e29b-41d4-a716-446655440002"
+                    meeting_room_id: "550e8400-e29b-41d4-a716-446655440000"
+                    start_time: "2025-01-15T10:00:00Z"
+                    end_time: "2025-01-15T11:00:00Z"
+                    max_concurrent_bookings: 3
+                    current_bookings_count: 1
+                    is_available: true
+                    availability_status: "1/3 occupied"
+                  - timeslot_id: "880e8400-e29b-41d4-a716-446655440003"
+                    meeting_room_id: "550e8400-e29b-41d4-a716-446655440000"
+                    start_time: "2025-01-15T11:00:00Z"
+                    end_time: "2025-01-15T12:00:00Z"
+                    max_concurrent_bookings: 3
+                    current_bookings_count: 0
+                    is_available: true
+                    availability_status: "0/3 occupied"
+                meta:
+                  total_count: 48
+                  current_page: 1
+                  total_pages: 3
+                  limit: 20
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+    post:
+      tags: [timeslots]
+      summary: Створити часовий слот
+      description: |
+        Доступно тільки для space_manager.
+        **US-005: Налаштовувати часові слоти**
+      operationId: createTimeslot
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTimeslotRequest"
+            example:
+              meeting_room_id: "550e8400-e29b-41d4-a716-446655440000"
+              start_time: "2025-01-15T10:00:00Z"
+              end_time: "2025-01-15T11:00:00Z"
+              max_concurrent_bookings: 3
+      responses:
+        "201":
+          description: Слот створено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Timeslot"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Конфлікт - слот вже існує
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error_code: "timeslot_conflict"
+                message: "Timeslot already exists for this room and time"
+                details:
+                  meeting_room_id: "550e8400-e29b-41d4-a716-446655440000"
+                  conflicting_time: "2025-01-15T10:00:00Z"
+
+  /bookings:
+    get:
+      tags: [bookings]
+      summary: Отримати список бронювань
+      description: |
+        Повертає бронювання поточного користувача за email.
+        **US-003: Переглядати мої бронювання**
+      operationId: listBookings
+      parameters:
+        - name: customer_email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+          example: "user@example.com"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [requested, confirmed, cancelled]
+          description: Фільтр за статусом
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 50
+      responses:
+        "200":
+          description: Список бронювань
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Booking"
+                  meta:
+                    $ref: "#/components/schemas/PaginationMeta"
+              example:
+                data:
+                  - booking_id: "990e8400-e29b-41d4-a716-446655440004"
+                    timeslot_id: "770e8400-e29b-41d4-a716-446655440002"
+                    customer_name: "John Doe"
+                    customer_email_masked: "j***@e***.com"
+                    booking_status: "confirmed"
+                    confirmation_code: "BK-2025-001234"
+                    created_at: "2025-01-10T09:00:00Z"
+                    confirmed_at: "2025-01-10T09:15:00Z"
+                    meeting_room:
+                      room_name: "Conference Room A"
+                      location: "Floor 2, Room 201"
+                    timeslot:
+                      start_time: "2025-01-15T10:00:00Z"
+                      end_time: "2025-01-15T11:00:00Z"
+                meta:
+                  total_count: 5
+                  current_page: 1
+                  total_pages: 1
+                  limit: 20
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+    post:
+      tags: [bookings]
+      summary: Створити нове бронювання
+      description: |
+        Створює нове бронювання переговорної кімнати.
+        Перевіряє capacity (max 3 одночасних бронювання).
+
+        **US-002: Створювати нове бронювання**
+      operationId: createBooking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingRequest"
+            example:
+              timeslot_id: "770e8400-e29b-41d4-a716-446655440002"
+              customer_name: "Jane Smith"
+              customer_email: "jane.smith@example.com"
+      responses:
+        "201":
+          description: Бронювання створено
+          headers:
+            X-Response-Time:
+              schema:
+                type: string
+              description: Час обробки запиту (для NFR performance)
+              example: "245ms"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+              example:
+                booking_id: "aa0e8400-e29b-41d4-a716-446655440005"
+                timeslot_id: "770e8400-e29b-41d4-a716-446655440002"
+                customer_name: "Jane Smith"
+                customer_email_masked: "j***@e***.com"
+                booking_status: "requested"
+                confirmation_code: "BK-2025-001235"
+                created_at: "2025-01-14T14:30:00Z"
+                confirmed_at: null
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: Слот недоступний (capacity досягнуто)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error_code: "slot_unavailable"
+                message: "This timeslot has reached maximum capacity (3/3)"
+                details:
+                  timeslot_id: "770e8400-e29b-41d4-a716-446655440002"
+                  current_bookings: 3
+                  max_concurrent_bookings: 3
+
+  /bookings/{booking_id}:
+    get:
+      tags: [bookings]
+      summary: Отримати деталі бронювання
+      description: |
+        Повертає деталі конкретного бронювання.
+        **US-008: Переглядати деталі бронювання**
+      operationId: getBooking
+      parameters:
+        - $ref: "#/components/parameters/BookingId"
+      responses:
+        "200":
+          description: Деталі бронювання
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingDetails"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags: [bookings]
+      summary: Оновити статус бронювання
+      description: |
+        Дозволяє підтвердити або скасувати бронювання.
+
+        - **space_manager**: може підтверджувати (US-006)
+        - **meeting_organizer**: може скасовувати своє (US-007)
+      operationId: updateBooking
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/BookingId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                booking_status:
+                  type: string
+                  enum: [confirmed, cancelled]
+              required:
+                - booking_status
+            example:
+              booking_status: "confirmed"
+      responses:
+        "200":
+          description: Статус оновлено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /bookings/by-confirmation:
+    get:
+      tags: [bookings]
+      summary: Знайти бронювання за confirmation_code
+      description: |
+        Публічний endpoint для учасників зустрічі.
+        **US-008: Переглядати деталі бронювання**
+      operationId: getBookingByConfirmationCode
+      parameters:
+        - name: confirmation_code
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "BK-2025-001234"
+      responses:
+        "200":
+          description: Бронювання знайдено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingDetails"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /analytics/room-usage:
+    get:
+      tags: [analytics]
+      summary: Статистика використання кімнат
+      description: |
+        Повертає аналітику використання переговорних кімнат.
+        Доступно тільки для space_manager.
+
+        **US-009: Отримувати аналітику використання**
+      operationId: getRoomUsageAnalytics
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: date_from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2025-01-01"
+        - name: date_to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2025-01-31"
+        - name: meeting_room_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Фільтр за конкретною кімнатою
+      responses:
+        "200":
+          description: Аналітика використання
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomUsageAnalytics"
+              example:
+                period:
+                  date_from: "2025-01-01"
+                  date_to: "2025-01-31"
+                summary:
+                  total_bookings: 156
+                  confirmed_bookings: 142
+                  cancelled_bookings: 14
+                  average_occupancy_rate: 0.68
+                rooms:
+                  - meeting_room_id: "550e8400-e29b-41d4-a716-446655440000"
+                    room_name: "Conference Room A"
+                    total_bookings: 89
+                    occupancy_rate: 0.82
+                    peak_hours: ["10:00-11:00", "14:00-15:00"]
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT токен для автентифікації space_manager
+
+  parameters:
+    MeetingRoomId:
+      name: meeting_room_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: UUID переговорної кімнати
+
+    BookingId:
+      name: booking_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: UUID бронювання
+
+  schemas:
+    MeetingRoom:
+      type: object
+      required:
+        - meeting_room_id
+        - room_name
+        - location
+        - capacity
+        - is_active
+        - created_at
+      properties:
+        meeting_room_id:
+          type: string
+          format: uuid
+          description: Унікальний ідентифікатор кімнати
+        room_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Назва переговорної кімнати
+        location:
+          type: string
+          maxLength: 200
+          description: Місцезнаходження (поверх, кімната)
+        capacity:
+          type: integer
+          minimum: 1
+          description: Максимальна кількість людей
+        equipment:
+          type: array
+          items:
+            type: string
+            enum:
+              [projector, whiteboard, tv_screen, video_conference, sound_system]
+          description: Доступне обладнання
+        is_active:
+          type: boolean
+          default: true
+          description: Чи активна кімната для бронювання
+        created_at:
+          type: string
+          format: date-time
+          description: Дата створення (ISO 8601 UTC)
+
+    CreateMeetingRoomRequest:
+      type: object
+      required:
+        - room_name
+        - location
+        - capacity
+      properties:
+        room_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        location:
+          type: string
+          maxLength: 200
+        capacity:
+          type: integer
+          minimum: 1
+        equipment:
+          type: array
+          items:
+            type: string
+
+    Timeslot:
+      type: object
+      required:
+        - timeslot_id
+        - meeting_room_id
+        - start_time
+        - end_time
+        - max_concurrent_bookings
+        - created_at
+      properties:
+        timeslot_id:
+          type: string
+          format: uuid
+        meeting_room_id:
+          type: string
+          format: uuid
+        start_time:
+          type: string
+          format: date-time
+          description: Початок слоту (ISO 8601 UTC)
+        end_time:
+          type: string
+          format: date-time
+          description: Кінець слоту (ISO 8601 UTC)
+        max_concurrent_bookings:
+          type: integer
+          enum: [3]
+          default: 3
+          description: Максимум одночасних бронювань (Twist A - capacity=3)
+        created_at:
+          type: string
+          format: date-time
+
+    TimeslotAvailability:
+      allOf:
+        - $ref: "#/components/schemas/Timeslot"
+        - type: object
+          properties:
+            current_bookings_count:
+              type: integer
+              minimum: 0
+              maximum: 3
+              description: Поточна кількість бронювань
+            is_available:
+              type: boolean
+              description: Чи є вільні місця (< 3 бронювань)
+            availability_status:
+              type: string
+              example: "2/3 occupied"
+              description: Людино-читабельний статус
+
+    CreateTimeslotRequest:
+      type: object
+      required:
+        - meeting_room_id
+        - start_time
+        - end_time
+      properties:
+        meeting_room_id:
+          type: string
+          format: uuid
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        max_concurrent_bookings:
+          type: integer
+          default: 3
+          enum: [3]
+
+    Booking:
+      type: object
+      required:
+        - booking_id
+        - timeslot_id
+        - customer_name
+        - customer_email_masked
+        - booking_status
+        - confirmation_code
+        - created_at
+      properties:
+        booking_id:
+          type: string
+          format: uuid
+        timeslot_id:
+          type: string
+          format: uuid
+        customer_name:
+          type: string
+          maxLength: 100
+        customer_email_masked:
+          type: string
+          description: Email з маскуванням (u***@e***.com) для privacy
+        booking_status:
+          type: string
+          enum: [requested, confirmed, cancelled]
+          description: |
+            Статус бронювання:
+            - requested: очікує підтвердження
+            - confirmed: підтверджено менеджером
+            - cancelled: скасовано
+        confirmation_code:
+          type: string
+          pattern: '^BK-\d{4}-\d{6}$'
+          example: "BK-2025-001234"
+        created_at:
+          type: string
+          format: date-time
+        confirmed_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    BookingDetails:
+      allOf:
+        - $ref: "#/components/schemas/Booking"
+        - type: object
+          properties:
+            meeting_room:
+              type: object
+              properties:
+                meeting_room_id:
+                  type: string
+                  format: uuid
+                room_name:
+                  type: string
+                location:
+                  type: string
+                equipment:
+                  type: array
+                  items:
+                    type: string
+            timeslot:
+              type: object
+              properties:
+                start_time:
+                  type: string
+                  format: date-time
+                end_time:
+                  type: string
+                  format: date-time
+                duration_minutes:
+                  type: integer
+                  example: 60
+
+    CreateBookingRequest:
+      type: object
+      required:
+        - timeslot_id
+        - customer_name
+        - customer_email
+      properties:
+        timeslot_id:
+          type: string
+          format: uuid
+        customer_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        customer_email:
+          type: string
+          format: email
+          maxLength: 255
+
+    RoomUsageAnalytics:
+      type: object
+      properties:
+        period:
+          type: object
+          properties:
+            date_from:
+              type: string
+              format: date
+            date_to:
+              type: string
+              format: date
+        summary:
+          type: object
+          properties:
+            total_bookings:
+              type: integer
+            confirmed_bookings:
+              type: integer
+            cancelled_bookings:
+              type: integer
+            average_occupancy_rate:
+              type: number
+              format: float
+              minimum: 0
+              maximum: 1
+        rooms:
+          type: array
+          items:
+            type: object
+            properties:
+              meeting_room_id:
+                type: string
+                format: uuid
+              room_name:
+                type: string
+              total_bookings:
+                type: integer
+              occupancy_rate:
+                type: number
+                format: float
+              peak_hours:
+                type: array
+                items:
+                  type: string
+
+    PaginationMeta:
+      type: object
+      required:
+        - total_count
+        - current_page
+        - total_pages
+        - limit
+      properties:
+        total_count:
+          type: integer
+          description: Загальна кількість елементів
+        current_page:
+          type: integer
+          minimum: 1
+        total_pages:
+          type: integer
+          minimum: 1
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 50
+
+    Error:
+      type: object
+      required:
+        - error_code
+        - message
+      properties:
+        error_code:
+          type: string
+          description: Машинний код помилки (snake_case)
+          enum:
+            - slot_unavailable
+            - invalid_email
+            - booking_not_found
+            - room_not_found
+            - timeslot_conflict
+            - invalid_date_range
+            - unauthorized
+        message:
+          type: string
+          description: Людино-читабельне повідомлення
+        details:
+          type: object
+          description: Додаткова інформація про помилку
+
+  responses:
+    BadRequest:
+      description: Невалідний запит
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error_code: "invalid_email"
+            message: "Invalid email format provided"
+            details:
+              field: "customer_email"
+              provided_value: "invalid-email"
+
+    NotFound:
+      description: Ресурс не знайдено
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error_code: "booking_not_found"
+            message: "Booking with provided ID does not exist"
+            details:
+              booking_id: "unknown-id"
+
+    Unauthorized:
+      description: Неавторизований доступ
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          example:
+            error_code: "unauthorized"
+            message: "Valid JWT token required for this operation"

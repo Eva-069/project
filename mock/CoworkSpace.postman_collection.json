@@ -1,0 +1,177 @@
+{
+  "info": {
+    "name": "CoworkSpace Booking API Mock",
+    "_postman_id": "cowork-kv14736512",
+    "description": "Mock requests for CoworkSpace Booking API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "List Meeting Rooms",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:4010/v1/meeting_rooms",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4010",
+          "path": ["v1", "meeting_rooms"]
+        }
+      }
+    },
+    {
+      "name": "Get Available Timeslots (US-001)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:4010/v1/timeslots?meeting_room_id=550e8400-e29b-41d4-a716-446655440000&date_from=2025-01-15&date_to=2025-01-20",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4010",
+          "path": ["v1", "timeslots"],
+          "query": [
+            {
+              "key": "meeting_room_id",
+              "value": "550e8400-e29b-41d4-a716-446655440000"
+            },
+            {
+              "key": "date_from",
+              "value": "2025-01-15"
+            },
+            {
+              "key": "date_to",
+              "value": "2025-01-20"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Create Booking (201)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "content-type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:4010/v1/bookings",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4010",
+          "path": ["v1", "bookings"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"timeslot_id\": \"770e8400-e29b-41d4-a716-446655440002\", \"customer_name\": \"Jane Smith\", \"customer_email\": \"jane@example.com\"}"
+        }
+      }
+    },
+    {
+      "name": "Create Booking (409 slot full - capacity 3/3)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "content-type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:4010/v1/bookings",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4010",
+          "path": ["v1", "bookings"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"timeslot_id\": \"880e8400-e29b-41d4-a716-446655440003\", \"customer_name\": \"John Doe\", \"customer_email\": \"john@example.com\"}"
+        }
+      }
+    },
+    {
+      "name": "Get Booking by ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "accept",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:4010/v1/bookings/990e8400-e29b-41d4-a716-446655440004",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4010",
+          "path": ["v1", "bookings", "990e8400-e29b-41d4-a716-446655440004"]
+        }
+      }
+    },
+    {
+      "name": "Update Booking Status (PATCH → cancelled)",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          {
+            "key": "content-type",
+            "value": "application/json"
+          },
+          {
+            "key": "authorization",
+            "value": "Bearer mock.token"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:4010/v1/bookings/990e8400-e29b-41d4-a716-446655440004",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4010",
+          "path": ["v1", "bookings", "990e8400-e29b-41d4-a716-446655440004"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"booking_status\": \"cancelled\"}"
+        }
+      }
+    },
+    {
+      "name": "401 Unauthorized (no token)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "content-type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "http://localhost:4010/v1/meeting_rooms",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "4010",
+          "path": ["v1", "meeting_rooms"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\"room_name\": \"Test Room\"}"
+        }
+      }
+    }
+  ]
+}
